@@ -1,7 +1,6 @@
-// 실제 연동 시 아래 주석을 풀고 키를 넣으면 됩니다.
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, getDocs, getDoc, doc, query, where, orderBy } from 'firebase/firestore';
 
-/*
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -10,28 +9,78 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
-export const app = initializeApp(firebaseConfig);
-*/
 
-// --- Mock Data Service (실제 Firebase 연동 전까지 사용) ---
-let mockForms = [
-  { id: '1', title: '봄소풍 현장체험학습 신청서', description: '5월 10일 서울대공원 봄소풍 안내 및 동의서입니다.', createdAt: '2026-05-01T10:00:00Z', status: 'active', requireSignature: true, fields: [{ id: '11', type: 'text', label: '특이사항' }] },
-  { id: '2', title: '개인정보 수집 및 이용 동의서', description: '새학기 개인정보 수집 동의서입니다.', createdAt: '2026-03-02T09:00:00Z', status: 'closed', requireSignature: true, fields: [] }
-];
+// Next.js 환경에서 여러 번 초기화되는 것을 방지
+const app = !getApps().length && firebaseConfig.apiKey ? initializeApp(firebaseConfig) : getApp();
+const db = firebaseConfig.apiKey ? getFirestore(app) : null;
 
-let mockSubmissions = [];
-
+// Firebase 연동 서비스 (기존 mockDb 이름을 그대로 유지하여 코드 변경 최소화)
 export const mockDb = {
-  getForms: async () => [...mockForms],
-  getFormById: async (id) => mockForms.find(f => f.id === id),
+  getForms: async () => {
+    if (!db) return [];
+    try {
+      const q = query(collection(db, "forms"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+      console.error("Error getting forms: ", e);
+      // 인덱스 문제 등이 생길 수 있으니 폴백
+      const querySnapshot = await getDocs(collection(db, "forms"));
+      const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return docs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+  },
+  
+  getFormById: async (id) => {
+    if (!db) return null;
+    try {
+      const docRef = doc(db, "forms", id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+      }
+      return null;
+    } catch (e) {
+      console.error("Error getting form: ", e);
+      return null;
+    }
+  },
+  
   createForm: async (form) => {
-    const newForm = { ...form, id: Date.now().toString(), createdAt: new Date().toISOString() };
-    mockForms.push(newForm);
-    return newForm;
+    if (!db) throw new Error("Firebase가 연결되지 않았습니다.");
+    try {
+      const newForm = { ...form, createdAt: new Date().toISOString() };
+      const docRef = await addDoc(collection(db, "forms"), newForm);
+      return { id: docRef.id, ...newForm };
+    } catch (e) {
+      console.error("Error adding document: ", e);
+      throw e;
+    }
   },
+  
   submitForm: async (submission) => {
-    mockSubmissions.push({ ...submission, id: Date.now().toString(), submittedAt: new Date().toISOString() });
-    return true;
+    if (!db) throw new Error("Firebase가 연결되지 않았습니다.");
+    try {
+      const newSub = { ...submission, submittedAt: new Date().toISOString() };
+      await addDoc(collection(db, "submissions"), newSub);
+      return true;
+    } catch (e) {
+      console.error("Error submitting form: ", e);
+      throw e;
+    }
   },
-  getSubmissionsByForm: async (formId) => mockSubmissions.filter(s => s.formId === formId)
+  
+  getSubmissionsByForm: async (formId) => {
+    if (!db) return [];
+    try {
+      const q = query(collection(db, "submissions"), where("formId", "==", formId));
+      const querySnapshot = await getDocs(q);
+      const subs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // 클라이언트 메모리에서 최신순 정렬 (Firestore 복합 인덱스 요구사항 우회)
+      return subs.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+    } catch (e) {
+      console.error("Error getting submissions: ", e);
+      return [];
+    }
+  }
 };

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { Button } from '@/components/ui/Button';
 
 const firebaseConfig = {
@@ -22,9 +22,10 @@ function getFirebaseAuth() {
     let app;
     if (existingApps.length > 0 && existingApps[0].options?.apiKey) {
       app = getApp();
+    } else if (existingApps.length === 0) {
+      app = initializeApp(firebaseConfig);
     } else {
-      // 빈 껍데기 앱이 있으면 무시하고 새로 시도
-      app = existingApps.length === 0 ? initializeApp(firebaseConfig) : initializeApp(firebaseConfig, 'auth-app-' + Date.now());
+      app = initializeApp(firebaseConfig, 'login-app');
     }
     return getAuth(app);
   } catch (e) {
@@ -36,7 +37,35 @@ function getFirebaseAuth() {
 export default function TeacherLogin() {
   const router = useRouter();
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // 처음엔 리다이렉트 결과 확인 중
+
+  // 페이지 로드 시 구글 로그인 리다이렉트 결과 확인
+  useEffect(() => {
+    const authInstance = getFirebaseAuth();
+    if (!authInstance) {
+      setLoading(false);
+      return;
+    }
+
+    getRedirectResult(authInstance)
+      .then((result) => {
+        if (result && result.user) {
+          // 로그인 성공! 대시보드로 이동
+          router.push('/teacher/dashboard');
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Redirect result error:', err);
+        if (err.code === 'auth/unauthorized-domain') {
+          setError('이 도메인이 Firebase에서 허용되지 않습니다. Firebase 콘솔 > Authentication > Authorized domains에 현재 주소를 추가해주세요.');
+        } else {
+          setError(`로그인 오류: ${err.message}`);
+        }
+        setLoading(false);
+      });
+  }, [router]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -52,17 +81,12 @@ export default function TeacherLogin() {
 
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(authInstance, provider);
-      router.push('/teacher/dashboard');
+      // 팝업 대신 리다이렉트 방식 사용 (Vercel 등 프로덕션 환경에서 더 안정적)
+      await signInWithRedirect(authInstance, provider);
+      // 이후 처리는 useEffect의 getRedirectResult에서 함
     } catch (err) {
       console.error('로그인 에러:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('로그인 창이 닫혔습니다. 다시 시도해주세요.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError('이 도메인은 Firebase에서 허용되지 않습니다. Firebase 콘솔 > Authentication > Authorized domains에 도메인을 추가해주세요.');
-      } else {
-        setError(`오류가 발생했습니다: ${err.message}`);
-      }
+      setError(`로그인 오류: ${err.message}`);
       setLoading(false);
     }
   };
@@ -86,7 +110,7 @@ export default function TeacherLogin() {
           size="lg"
         >
           {loading ? (
-            '로그인 중...'
+            '처리 중...'
           ) : (
             <>
               <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

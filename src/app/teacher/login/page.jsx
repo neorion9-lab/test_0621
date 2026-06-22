@@ -2,9 +2,36 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebaseClient';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { Button } from '@/components/ui/Button';
+
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+function getFirebaseAuth() {
+  if (!firebaseConfig.apiKey) return null;
+  try {
+    const existingApps = getApps();
+    let app;
+    if (existingApps.length > 0 && existingApps[0].options?.apiKey) {
+      app = getApp();
+    } else {
+      // 빈 껍데기 앱이 있으면 무시하고 새로 시도
+      app = existingApps.length === 0 ? initializeApp(firebaseConfig) : initializeApp(firebaseConfig, 'auth-app-' + Date.now());
+    }
+    return getAuth(app);
+  } catch (e) {
+    console.error('Firebase auth init error:', e);
+    return null;
+  }
+}
 
 export default function TeacherLogin() {
   const router = useRouter();
@@ -12,20 +39,30 @@ export default function TeacherLogin() {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
-    if (!auth) {
-      setError('Firebase 설정이 올바르지 않습니다.');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
+    const authInstance = getFirebaseAuth();
+
+    if (!authInstance) {
+      setError('Firebase 환경변수가 설정되지 않았습니다. Vercel 환경변수를 확인해주세요.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      await signInWithPopup(auth, googleProvider);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(authInstance, provider);
       router.push('/teacher/dashboard');
     } catch (err) {
       console.error('로그인 에러:', err);
-      setError('구글 로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      if (err.code === 'auth/popup-closed-by-user') {
+        setError('로그인 창이 닫혔습니다. 다시 시도해주세요.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('이 도메인은 Firebase에서 허용되지 않습니다. Firebase 콘솔 > Authentication > Authorized domains에 도메인을 추가해주세요.');
+      } else {
+        setError(`오류가 발생했습니다: ${err.message}`);
+      }
       setLoading(false);
     }
   };
@@ -37,7 +74,7 @@ export default function TeacherLogin() {
         <p style={{ color: 'var(--text-secondary)', marginBottom: '2.5rem', fontSize: '1.05rem' }}>가정통신문을 관리하려면<br/>구글 계정으로 로그인해주세요.</p>
         
         {error && (
-          <p style={{ color: 'var(--danger)', marginBottom: '1.5rem', fontSize: '0.9rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
+          <p style={{ color: 'var(--danger)', marginBottom: '1.5rem', fontSize: '0.9rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-md)', wordBreak: 'break-word', textAlign: 'left' }}>
             {error}
           </p>
         )}

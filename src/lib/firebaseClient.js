@@ -11,8 +11,26 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Next.js 환경에서 여러 번 초기화되는 것을 방지, Vercel 빌드 중 환경변수 없을 때 에러 방지
-const app = getApps().length > 0 ? getApp() : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
+// 기존에 apiKey 없이 초기화된 앱이 있으면 모두 정리 후 다시 초기화
+function getFirebaseApp() {
+  const existingApps = getApps();
+  if (existingApps.length > 0) {
+    // 이미 초기화된 앱이 있으면 apiKey가 있는지 확인
+    const existingApp = getApp();
+    // Firebase 내부 옵션 확인
+    if (existingApp.options && existingApp.options.apiKey) {
+      return existingApp;
+    }
+    // apiKey가 없는 빈 껍데기 앱이면 무시하고 새로 만들기
+  }
+  // 환경변수가 있을 때만 초기화
+  if (firebaseConfig.apiKey) {
+    return initializeApp(firebaseConfig);
+  }
+  return null;
+}
+
+const app = getFirebaseApp();
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
 const googleProvider = new GoogleAuthProvider();

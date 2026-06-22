@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { Button } from '@/components/ui/Button';
 
 const firebaseConfig = {
@@ -18,15 +18,15 @@ const firebaseConfig = {
 function getFirebaseAuth() {
   if (!firebaseConfig.apiKey) return null;
   try {
+    // 이미 apiKey와 함께 초기화된 앱이 있으면 재사용
     const existingApps = getApps();
-    let app;
     if (existingApps.length > 0 && existingApps[0].options?.apiKey) {
-      app = getApp();
-    } else if (existingApps.length === 0) {
-      app = initializeApp(firebaseConfig);
-    } else {
-      app = initializeApp(firebaseConfig, 'login-app');
+      return getAuth(getApp());
     }
+    // 없으면 새로 초기화
+    const app = existingApps.length === 0
+      ? initializeApp(firebaseConfig)
+      : initializeApp(firebaseConfig, `app-${Date.now()}`);
     return getAuth(app);
   } catch (e) {
     console.error('Firebase auth init error:', e);
@@ -37,35 +37,7 @@ function getFirebaseAuth() {
 export default function TeacherLogin() {
   const router = useRouter();
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true); // 처음엔 리다이렉트 결과 확인 중
-
-  // 페이지 로드 시 구글 로그인 리다이렉트 결과 확인
-  useEffect(() => {
-    const authInstance = getFirebaseAuth();
-    if (!authInstance) {
-      setLoading(false);
-      return;
-    }
-
-    getRedirectResult(authInstance)
-      .then((result) => {
-        if (result && result.user) {
-          // 로그인 성공! 대시보드로 이동
-          router.push('/teacher/dashboard');
-        } else {
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error('Redirect result error:', err);
-        if (err.code === 'auth/unauthorized-domain') {
-          setError('이 도메인이 Firebase에서 허용되지 않습니다. Firebase 콘솔 > Authentication > Authorized domains에 현재 주소를 추가해주세요.');
-        } else {
-          setError(`로그인 오류: ${err.message}`);
-        }
-        setLoading(false);
-      });
-  }, [router]);
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -81,25 +53,36 @@ export default function TeacherLogin() {
 
     try {
       const provider = new GoogleAuthProvider();
-      // 팝업 대신 리다이렉트 방식 사용 (Vercel 등 프로덕션 환경에서 더 안정적)
-      await signInWithRedirect(authInstance, provider);
-      // 이후 처리는 useEffect의 getRedirectResult에서 함
+      const result = await signInWithPopup(authInstance, provider);
+      if (result.user) {
+        router.push('/teacher/dashboard');
+      }
     } catch (err) {
-      console.error('로그인 에러:', err);
-      setError(`로그인 오류: ${err.message}`);
+      console.error('로그인 에러 코드:', err.code);
+      console.error('로그인 에러 메시지:', err.message);
+      
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        setError('로그인 창이 닫혔습니다. 다시 시도해주세요.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(`도메인 미승인 오류입니다. Firebase Console > Authentication > Settings > Authorized domains에 "${window.location.hostname}"을 추가해주세요.`);
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('팝업이 차단되었습니다. 브라우저의 팝업 허용 설정을 확인해주세요.');
+      } else {
+        setError(`오류 (${err.code}): ${err.message}`);
+      }
       setLoading(false);
     }
   };
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
-      <div className="glass text-center" style={{ padding: '3rem', borderRadius: 'var(--radius-lg)', maxWidth: '400px', width: '100%' }}>
+      <div className="glass text-center" style={{ padding: '3rem', borderRadius: 'var(--radius-lg)', maxWidth: '420px', width: '100%' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem', color: 'var(--primary)', fontWeight: '700' }}>선생님 로그인 👩‍🏫</h1>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '2.5rem', fontSize: '1.05rem' }}>가정통신문을 관리하려면<br/>구글 계정으로 로그인해주세요.</p>
         
         {error && (
-          <p style={{ color: 'var(--danger)', marginBottom: '1.5rem', fontSize: '0.9rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-md)', wordBreak: 'break-word', textAlign: 'left' }}>
-            {error}
+          <p style={{ color: 'var(--danger)', marginBottom: '1.5rem', fontSize: '0.85rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: 'var(--radius-md)', wordBreak: 'break-word', textAlign: 'left', lineHeight: '1.5' }}>
+            ⚠️ {error}
           </p>
         )}
 
@@ -109,9 +92,7 @@ export default function TeacherLogin() {
           style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
           size="lg"
         >
-          {loading ? (
-            '처리 중...'
-          ) : (
+          {loading ? '로그인 중...' : (
             <>
               <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

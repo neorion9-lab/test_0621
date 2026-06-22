@@ -10,9 +10,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Next.js 환경에서 여러 번 초기화되는 것을 방지
-const app = !getApps().length && firebaseConfig.apiKey ? initializeApp(firebaseConfig) : getApp();
-const db = firebaseConfig.apiKey ? getFirestore(app) : null;
+// Next.js 환경에서 여러 번 초기화되는 것을 방지, Vercel 빌드 중 환경변수 없을 때 에러 방지
+const app = getApps().length > 0 ? getApp() : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
+const db = app ? getFirestore(app) : null;
 
 // Firebase 연동 서비스 (기존 mockDb 이름을 그대로 유지하여 코드 변경 최소화)
 export const mockDb = {

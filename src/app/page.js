@@ -12,7 +12,7 @@ export default function Home() {
           <Link href="/parent/login" style={{ width: '100%' }}>
             <Button style={{ width: '100%' }} size="lg">👨‍👩‍👧‍👦 학부모로 시작하기</Button>
           </Link>
-          <Link href="/teacher/dashboard" style={{ width: '100%' }}>
+          <Link href="/teacher/login" style={{ width: '100%' }}>
             <Button variant="secondary" style={{ width: '100%' }} size="lg">👩‍🏫 교사로 로그인하기</Button>
           </Link>
         </div>

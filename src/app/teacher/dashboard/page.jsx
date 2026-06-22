@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { mockDb } from '@/lib/firebaseClient';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function TeacherDashboard() {
+  const { user, loading: authLoading } = useAuth();
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,6 +19,14 @@ export default function TeacherDashboard() {
     }
     loadForms();
   }, []);
+
+  if (authLoading || !user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem' }}>
+        <p className="animate-pulse" style={{ color: 'var(--text-secondary)' }}>인증 확인 중...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">

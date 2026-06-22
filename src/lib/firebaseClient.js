@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, getDoc, doc, query, where, orderBy } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,6 +14,10 @@ const firebaseConfig = {
 // Next.js 환경에서 여러 번 초기화되는 것을 방지, Vercel 빌드 중 환경변수 없을 때 에러 방지
 const app = getApps().length > 0 ? getApp() : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
 const db = app ? getFirestore(app) : null;
+const auth = app ? getAuth(app) : null;
+const googleProvider = new GoogleAuthProvider();
+
+export { db, auth, googleProvider };
 
 // Firebase 연동 서비스 (기존 mockDb 이름을 그대로 유지하여 코드 변경 최소화)
 export const mockDb = {

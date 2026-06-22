@@ -4,13 +4,23 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { mockDb } from '@/lib/firebaseClient';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function CreateForm() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [fields, setFields] = useState([]);
   const [requireSignature, setRequireSignature] = useState(true);
+
+  if (authLoading || !user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem' }}>
+        <p className="animate-pulse" style={{ color: 'var(--text-secondary)' }}>인증 확인 중...</p>
+      </div>
+    );
+  }
 
   const addField = (type) => {
     setFields([...fields, { id: Date.now().toString(), type, label: '', required: false }]);

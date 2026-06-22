@@ -3,13 +3,19 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { mockDb } from '@/lib/firebaseClient';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function FormResults({ params }) {
+  const { user, loading: authLoading } = useAuth();
   const resolvedParams = use(params);
   const router = useRouter();
   const [form, setForm] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  if (authLoading || !user) {
+    return <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-secondary)' }} className="animate-pulse">인증 확인 중...</div>;
+  }
 
   useEffect(() => {
     async function loadData() {
